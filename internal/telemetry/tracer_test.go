@@ -3,9 +3,6 @@ package telemetry
 import (
 	"context"
 	"testing"
-	"time"
-
-	"github.com/sakajunquality/buildx-telemetry/internal/buildx"
 )
 
 func TestConfig(t *testing.T) {
@@ -44,23 +41,5 @@ func TestExportTracesWithNoSteps(t *testing.T) {
 	// We expect an error since we're not connecting to a real OTLP endpoint
 	if err == nil {
 		t.Skip("Expected connection error, but none occurred. This may happen if you're running with a real collector.")
-	}
-}
-
-func createTestBuildSteps() []buildx.BuildStep {
-	now := time.Now()
-	return []buildx.BuildStep{
-		{
-			Name:      "test-step-1",
-			Started:   now,
-			Completed: now.Add(10 * time.Second),
-			Cached:    false,
-		},
-		{
-			Name:      "test-step-2",
-			Started:   now.Add(10 * time.Second),
-			Completed: now.Add(20 * time.Second),
-			Cached:    true,
-		},
 	}
 }
