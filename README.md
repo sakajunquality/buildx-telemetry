@@ -1,8 +1,13 @@
 # Buildx Telemetry
 
-A tool for converting Docker Buildx logs to OpenTelemetry traces.
 
 [![CI](https://github.com/sakajunquality/buildx-telemetry/actions/workflows/ci.yml/badge.svg)](https://github.com/sakajunquality/buildx-telemetry/actions/workflows/ci.yml)
+
+
+A tool for converting Docker Buildx logs to OpenTelemetry traces.
+
+![Trace](docs/resources/trace.png "Trace")
+
 
 ## Overview
 
