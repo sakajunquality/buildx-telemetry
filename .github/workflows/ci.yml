@@ -7,8 +7,20 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    name: build
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v4
+      with:
+        go-version-file: 'go.mod'
+        cache: true
+    - uses: golangci/golangci-lint-action@v6
+      with:
+        args: "--out-format=colored-line-number --timeout=10m"
+  build-and-test:
+    name: build and test
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -17,6 +29,4 @@ jobs:
         go-version-file: 'go.mod'
         cache: true
     - run: go build -o buildx-telemetry ./cmd
-    - uses: golangci/golangci-lint-action@v6
-      with:
-        args: "--out-format=colored-line-number --timeout=10m"
+    - run: go test -v ./...
