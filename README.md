@@ -33,6 +33,7 @@ buildx-telemetry --input=build-log.json
 - `--debug`: Enable debug mode to print detailed step information
 - `--input`: Input file (defaults to stdin)
 - `--log-level`: Set the logging level (debug, info, warn, error) (default: "info")
+- `--exit-code-on-error`: Exit code to use when an error occurs (default: 1)
 
 ## Project Structure
 
@@ -72,6 +73,16 @@ You can control the log level with the `--log-level` flag:
 ```bash
 buildx-telemetry --log-level=debug
 ```
+
+## Error Handling
+
+When an error occurs, the application logs the error details and exits with the specified exit code. You can control the exit code using the `--exit-code-on-error` flag:
+
+```bash
+buildx-telemetry --exit-code-on-error=2
+```
+
+Setting `--exit-code-on-error=0` will make the application continue with exit code 0 even when errors occur, which can be useful in CI/CD pipelines where you want to avoid failing the pipeline.
 
 ## Example
 
