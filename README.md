@@ -2,11 +2,15 @@
 
 A tool for converting Docker Buildx logs to OpenTelemetry traces.
 
+[![CI](https://github.com/sakajunquality/buildx-telemetry/actions/workflows/ci.yml/badge.svg)](https://github.com/sakajunquality/buildx-telemetry/actions/workflows/ci.yml)
+
 ## Overview
 
 This application consumes Docker Buildx log output in the `rawjson` format and exports the build steps as OpenTelemetry traces. This allows you to view your Docker build steps in your favorite OpenTelemetry tracing visualization tool.
 
 ## Installation
+
+### Go install
 
 ```bash
 go install github.com/sakajunquality/buildx-telemetry/cmd@latest
@@ -36,20 +40,7 @@ buildx-telemetry --input=build-log.json
 - `--exit-code-on-error`: Exit code to use when an error occurs (default: 1)
 - `--trace-context`: W3C Trace Context header for distributed tracing (default: empty)
 - `--version`: Version information to add to the trace (default: empty)
-
-## Project Structure
-
-```
-├── cmd/
-│   └── main.go             # Application entry point
-├── internal/
-│   ├── buildx/             # Buildx log parsing and models
-│   │   └── parser.go
-│   ├── logger/             # Structured logging
-│   │   └── logger.go
-│   └── telemetry/          # OpenTelemetry integration
-│       └── tracer.go
-```
+- `--v`: Show buildx-telemetry version information and exit
 
 ## Development
 
@@ -65,6 +56,16 @@ Build the application:
 ```bash
 go build -o buildx-telemetry ./cmd
 ```
+
+## CI/CD
+
+The project uses GitHub Actions for continuous integration and delivery:
+
+- **CI Pipeline**: Runs on every push and pull request to main branch
+  - Linting with golangci-lint
+  - Running tests with race detector and coverage reporting
+  - Building the application
+
 
 ## Logging
 
