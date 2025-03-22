@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 
 	"github.com/sakajunquality/buildx-telemetry/internal/buildx"
 	"github.com/sakajunquality/buildx-telemetry/internal/logger"
@@ -12,6 +13,13 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
+)
+
+// Build information. Populated at build-time by GoReleaser.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
 )
 
 var (
@@ -22,11 +30,19 @@ var (
 	logLevel        = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	exitCodeOnError = flag.Int("exit-code-on-error", 1, "Exit code when an error occurs")
 	traceContext    = flag.String("trace-context", "", "W3C Trace Context header for distributed tracing (default: empty)")
-	version         = flag.String("version", "", "Version information to add to the trace (default: empty)")
+	versionFlag     = flag.String("version", "", "Version information to add to the trace (default: empty)")
+	showVersion     = flag.Bool("v", false, "Show version information and exit")
 )
 
 func main() {
 	flag.Parse()
+
+	// Show version information if requested
+	if *showVersion {
+		fmt.Printf("buildx-telemetry version %s, commit %s, built on %s\n", version, commit, date)
+		fmt.Printf("Built with %s\n", runtime.Version())
+		return
+	}
 
 	// Initialize logger
 	logConfig := logger.DefaultConfig()
@@ -38,15 +54,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error initializing logger: %v\n", err)
 		os.Exit(*exitCodeOnError)
 	}
-	defer log.Sync()
+	defer log.Sync() //nolint:errcheck
 
 	log.Info("Starting buildx-telemetry",
+		zap.String("app_version", version),
 		zap.String("service", *serviceName),
 		zap.String("otlp-endpoint", *otlpEndpoint),
 		zap.Bool("debug", *debug),
 		zap.Int("exit-code-on-error", *exitCodeOnError),
 		zap.String("trace-context", *traceContext),
-		zap.String("version", *version))
+		zap.String("version", *versionFlag))
 
 	// Set up the input reader
 	var reader *os.File
@@ -99,8 +116,11 @@ func main() {
 	}
 
 	// Add version if provided
-	if *version != "" {
-		tracerConfig.Version = *version
+	if *versionFlag != "" {
+		tracerConfig.Version = *versionFlag
+	} else if version != "dev" {
+		// Use the build version if no explicit version was provided
+		tracerConfig.Version = version
 	}
 
 	tracer, err := telemetry.NewTracerWithLogger(ctx, tracerConfig, log)
