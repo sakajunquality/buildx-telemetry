@@ -16,7 +16,7 @@ jobs:
       with:
         go-version-file: 'go.mod'
         cache: true
-    - run: go build -v ./cmd
+    - run: go build -v ./cmd -o buildx-telemetry
     - uses: golangci/golangci-lint-action@v6
       with:
         args: "--out-format=colored-line-number --timeout=10m"
