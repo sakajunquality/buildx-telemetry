@@ -9,6 +9,8 @@ import (
 	"github.com/sakajunquality/buildx-telemetry/internal/buildx"
 	"github.com/sakajunquality/buildx-telemetry/internal/logger"
 	"github.com/sakajunquality/buildx-telemetry/internal/telemetry"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +21,8 @@ var (
 	inputFile       = flag.String("input", "", "Input file (defaults to stdin)")
 	logLevel        = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 	exitCodeOnError = flag.Int("exit-code-on-error", 1, "Exit code when an error occurs")
+	traceContext    = flag.String("trace-context", "", "W3C Trace Context header for distributed tracing (default: empty)")
+	version         = flag.String("version", "", "Version information to add to the trace (default: empty)")
 )
 
 func main() {
@@ -40,7 +44,9 @@ func main() {
 		zap.String("service", *serviceName),
 		zap.String("otlp-endpoint", *otlpEndpoint),
 		zap.Bool("debug", *debug),
-		zap.Int("exit-code-on-error", *exitCodeOnError))
+		zap.Int("exit-code-on-error", *exitCodeOnError),
+		zap.String("trace-context", *traceContext),
+		zap.String("version", *version))
 
 	// Set up the input reader
 	var reader *os.File
@@ -69,12 +75,35 @@ func main() {
 
 	log.Info("Parsed build log", zap.Int("step_count", len(steps)))
 
-	// Initialize telemetry tracer
+	// Set up trace context if provided
 	ctx := context.Background()
-	tracer, err := telemetry.NewTracerWithLogger(ctx, telemetry.Config{
+	if *traceContext != "" {
+		tc := propagation.TraceContext{}
+		headerMap := propagation.MapCarrier{"traceparent": *traceContext}
+		ctx = tc.Extract(ctx, headerMap)
+
+		spanCtx := trace.SpanContextFromContext(ctx)
+		if spanCtx.IsValid() {
+			log.Info("Using parent trace context",
+				zap.String("traceID", spanCtx.TraceID().String()),
+				zap.String("spanID", spanCtx.SpanID().String()))
+		} else {
+			log.Warn("Invalid trace context provided", zap.String("trace-context", *traceContext))
+		}
+	}
+
+	// Initialize telemetry tracer
+	tracerConfig := telemetry.Config{
 		OTLPEndpoint: *otlpEndpoint,
 		ServiceName:  *serviceName,
-	}, log)
+	}
+
+	// Add version if provided
+	if *version != "" {
+		tracerConfig.Version = *version
+	}
+
+	tracer, err := telemetry.NewTracerWithLogger(ctx, tracerConfig, log)
 	if err != nil {
 		log.Error("Error initializing tracer", zap.Error(err))
 		os.Exit(*exitCodeOnError)

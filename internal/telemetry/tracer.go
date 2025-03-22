@@ -7,6 +7,7 @@ import (
 	"github.com/sakajunquality/buildx-telemetry/internal/buildx"
 	"github.com/sakajunquality/buildx-telemetry/internal/logger"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -19,6 +20,7 @@ import (
 type Config struct {
 	OTLPEndpoint string
 	ServiceName  string
+	Version      string
 }
 
 // Tracer manages the OpenTelemetry tracing
@@ -39,7 +41,16 @@ func NewTracer(ctx context.Context, config Config) (*Tracer, error) {
 func NewTracerWithLogger(ctx context.Context, config Config, log logger.Logger) (*Tracer, error) {
 	log.Info("Initializing OpenTelemetry tracer",
 		zap.String("endpoint", config.OTLPEndpoint),
-		zap.String("service", config.ServiceName))
+		zap.String("service", config.ServiceName),
+		zap.String("version", config.Version))
+
+	// Check if we have a parent span context
+	parentSpanContext := trace.SpanContextFromContext(ctx)
+	if parentSpanContext.IsValid() {
+		log.Info("Found valid parent trace context",
+			zap.String("traceID", parentSpanContext.TraceID().String()),
+			zap.String("spanID", parentSpanContext.SpanID().String()))
+	}
 
 	exporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(config.OTLPEndpoint),
@@ -49,11 +60,19 @@ func NewTracerWithLogger(ctx context.Context, config Config, log logger.Logger) 
 		return nil, fmt.Errorf("creating OTLP trace exporter: %w", err)
 	}
 
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(config.ServiceName),
-		),
-	)
+	// Prepare resource attributes
+	resourceOpts := []resource.Option{
+		resource.WithAttributes(semconv.ServiceName(config.ServiceName)),
+	}
+
+	// Add version information if provided
+	if config.Version != "" {
+		resourceOpts = append(resourceOpts, resource.WithAttributes(
+			semconv.ServiceVersion(config.Version),
+		))
+	}
+
+	res, err := resource.New(ctx, resourceOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("creating resource: %w", err)
 	}
@@ -78,9 +97,29 @@ func NewTracerWithLogger(ctx context.Context, config Config, log logger.Logger) 
 func (t *Tracer) ExportBuildTraces(ctx context.Context, steps []buildx.BuildStep) (string, error) {
 	t.logger.Info("Starting to export build traces", zap.Int("steps", len(steps)))
 
+	// Create a new span for the build, potentially as a child of an existing trace
 	tracer := otel.Tracer("buildx")
-	ctx, span := tracer.Start(ctx, "build")
+
+	// Check if we have a parent span in the context
+	parentSpanContext := trace.SpanContextFromContext(ctx)
+
+	var span trace.Span
+	if parentSpanContext.IsValid() {
+		t.logger.Info("Creating build span as child of parent span",
+			zap.String("parentTraceID", parentSpanContext.TraceID().String()))
+		ctx, span = tracer.Start(ctx, "docker-build")
+	} else {
+		t.logger.Info("Creating new root build span")
+		ctx, span = tracer.Start(ctx, "docker-build")
+	}
+
+	// Add version attribute to the span if provided
+	if t.config.Version != "" {
+		span.SetAttributes(attribute.String("version", t.config.Version))
+	}
+
 	defer span.End()
+
 	traceID := span.SpanContext().TraceID()
 
 	for i, step := range steps {
@@ -88,8 +127,16 @@ func (t *Tracer) ExportBuildTraces(ctx context.Context, steps []buildx.BuildStep
 		if step.Cached {
 			spanName += " (cached)"
 		}
-		_, span := tracer.Start(ctx, spanName, trace.WithTimestamp(step.Started))
-		span.End(trace.WithTimestamp(step.Completed))
+
+		// Create child spans for each build step
+		_, stepSpan := tracer.Start(ctx, spanName, trace.WithTimestamp(step.Started))
+
+		// Add version attribute to step spans as well
+		if t.config.Version != "" {
+			stepSpan.SetAttributes(attribute.String("version", t.config.Version))
+		}
+
+		stepSpan.End(trace.WithTimestamp(step.Completed))
 
 		if i%10 == 0 && i > 0 {
 			t.logger.Debug("Exported step traces", zap.Int("count", i))
