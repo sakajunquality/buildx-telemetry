@@ -1,0 +1,64 @@
+steps:
+  # Enable Docker Buildx
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'buildx'
+      - 'create'
+      - '--use'
+      - '--driver'
+      - 'docker-container'
+      - '--bootstrap'
+    id: buildx-create
+
+  # Build and push the Docker image using Buildx
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      # Fix the image name: YOUR_APP_IMAGE
+      - |
+        docker buildx build --platform linux/amd64 --tag  {{ YOUR_APP_IMAGE }} --push --progress=rawjson . 2>&1 | tee /workspace/buildx.log
+    id: build-and-push
+    waitFor: ['buildx-create']
+
+  # Run OpenTelemetry Collector
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'run'
+      - '--name'
+      - 'otel-collector'
+      - '--network=cloudbuild'
+      - '-d'
+      - '-p'
+      - '4317:4317'
+      - '{{ YOUR_OTEL_IMAGE }}'
+      - '--config=/etc/otel/config.yaml'
+    id: run-otel-collector
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'analyze'
+    args:
+      - 'run'
+      - '--network=cloudbuild'
+      - '-v'
+      - '/workspace/buildx.log:/workspace/buildx.log'
+      - '{{ YOUR_OTEL_IMAGE }}' # This repo's docker image
+      - '-input'
+      - '/workspace/buildx.log'
+      - '-otlp-endpoint'
+      - 'otel-collector:4317'
+      - '-service-name'
+      - 'test-container' # Can specify the name of the application
+      - '-version'
+      - 'v1.2.3' # Can specify the version of the application
+
+  # This is an optional step to cleanup the resources
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'cleanup'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker logs otel-collector
+        docker stop otel-collector
+        docker rm otel-collector
