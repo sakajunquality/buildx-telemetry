@@ -32,6 +32,7 @@ buildx-telemetry --input=build-log.json
 - `--service-name`: Service name for telemetry (default: "docker-build-telemetry")
 - `--debug`: Enable debug mode to print detailed step information
 - `--input`: Input file (defaults to stdin)
+- `--log-level`: Set the logging level (debug, info, warn, error) (default: "info")
 
 ## Project Structure
 
@@ -41,6 +42,8 @@ buildx-telemetry --input=build-log.json
 ├── internal/
 │   ├── buildx/             # Buildx log parsing and models
 │   │   └── parser.go
+│   ├── logger/             # Structured logging
+│   │   └── logger.go
 │   └── telemetry/          # OpenTelemetry integration
 │       └── tracer.go
 ```
@@ -58,6 +61,16 @@ Build the application:
 
 ```bash
 go build -o buildx-telemetry ./cmd
+```
+
+## Logging
+
+The application uses structured logging with the Zap library. By default, logs are output in JSON format for production use, but in development mode (--debug), they are output in a more human-readable format.
+
+You can control the log level with the `--log-level` flag:
+
+```bash
+buildx-telemetry --log-level=debug
 ```
 
 ## Example
